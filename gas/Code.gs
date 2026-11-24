@@ -17,7 +17,8 @@ const RELAY_KEY = '';
 
 const TZ = 'Asia/Tokyo';
 const MAX_ITEMS = 80;
-const SEARCH_DAYS = 7;   // Gmail は直近この日数を検索（処理済みはメール 1 通ごとに記録）
+const SEARCH_DAYS = 7;          // Gmail は直近この日数を検索（処理済みはメール 1 通ごとに記録）
+const SEARCH_DAYS_KYUKO = 90;   // 休講・補講は何週間も前に案内されるので長めに読む（終わった日付は登録しない）
 
 /** 休講・補講ルールのひな形（アプリの「休講・補講のルールを追加」と同じ） */
 const KYUKO_TEMPLATE = {
@@ -48,7 +49,7 @@ function normalizeRule_(r) {
     id: String(r.id || ('r' + Utilities.getUuid().replace(/-/g, '').slice(0, 8))),
     name: String(r.name || 'ルール').slice(0, 40),
     on: r.on !== false,
-    mode: r.mode === 'kyuko' ? 'kyuko' : 'date',
+    mode: ['kyuko', 'ignore'].indexOf(r.mode) >= 0 ? r.mode : 'date',
     from: list(r.from).join(', '),
     keywords: list(r.keywords),
     gmail: r.gmail !== false,
@@ -185,14 +186,14 @@ function checkMail() {
 function scanGmail_(rules, errors) {
   const seen = loadJson_('seen', []);
   const seenSet = new Set(seen);
-  const oldest = Date.now() - (SEARCH_DAYS + 1) * 864e5;
   const out = [];
 
-  rules.filter(r => r.gmail).forEach(r => {   // 上のルールが優先
+  orderRules_(rules).filter(r => r.gmail).forEach(r => {   // 無視ルール → 上のルールの順
     const q = gmailQuery_(r);
     if (!q) return;
+    const oldest = Date.now() - (searchDays_(r) + 1) * 864e5;
     let threads;
-    try { threads = GmailApp.search(q, 0, 30); }
+    try { threads = GmailApp.search(q, 0, 50); }
     catch (e) { errors.push('Gmail（' + r.name + '）: ' + e.message); return; }
 
     threads.forEach(th => th.getMessages().forEach(m => {
@@ -215,8 +216,14 @@ function scanGmail_(rules, errors) {
   return out;
 }
 
+/** 無視ルールはどこにあっても先に判定する（ほかは並び順のまま） */
+function orderRules_(rules) {
+  return rules.filter(r => r.mode === 'ignore').concat(rules.filter(r => r.mode !== 'ignore'));
+}
+function searchDays_(r) { return r.mode === 'kyuko' ? SEARCH_DAYS_KYUKO : SEARCH_DAYS; }
+
 function gmailQuery_(r) {
-  const parts = ['newer_than:' + SEARCH_DAYS + 'd', '-in:sent', '-in:chats'];
+  const parts = ['newer_than:' + searchDays_(r) + 'd', '-in:sent', '-in:chats'];
   const froms = splitList_(r.from).map(x => x.replace(/^@/, ''));
   if (froms.length) parts.push('from:(' + froms.join(' OR ') + ')');
   const kws = r.keywords.map(k => '"' + k.replace(/"/g, '') + '"');
@@ -241,9 +248,14 @@ function fromMatches_(r, from) {
  * ルールで本文を読む。当てはまらなければ null、当てはまれば予定の配列（0 件もありうる）
  */
 function readByRule_(r, text, base, fallbackTitle) {
+  if (r.mode === 'ignore') {
+    if (r.keywords.length && !r.keywords.some(k => text.indexOf(k) >= 0)) return null;
+    return []; // 当てはまったら何も登録しない（処理済みにだけする）
+  }
   if (r.mode === 'kyuko') {
     if (!isKyukoNotice_(text)) return null;
-    return parseKyuko_(text, r, base);
+    const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    return parseKyuko_(text, r, base).filter(k => k.date >= today); // 終わった日付は登録しない
   }
   if (isKyukoNotice_(text)) return null; // 休講・補講の案内は休講・補講ルールに任せる
   let kw = null;
@@ -350,7 +362,7 @@ function parsePeriods_(s) {
 // ---------------- Google Classroom ----------------
 function scanClassroom_(s, rules, since, errors) {
   const out = [];
-  const crRules = rules.filter(r => r.classroom);
+  const crRules = orderRules_(rules).filter(r => r.classroom);
   const courses = Classroom.Courses.list({ courseStates: ['ACTIVE'], pageSize: 50 }).courses || [];
   courses.forEach(c => {
     // 期限つきの課題
@@ -491,6 +503,30 @@ function upsert_(items, f, s) {
   }
 }
 
+/** カレンダーの色：休講＝赤、補講＝青、変更後＝オレンジ（変更前はグレー） */
+function eventColor_(it) {
+  if (it.changedFrom) return CalendarApp.EventColor.ORANGE;
+  if (it.kind === 'kyuko' && it.keyword === '休講') return CalendarApp.EventColor.RED;
+  if (it.kind === 'kyuko' && it.keyword === '補講') return CalendarApp.EventColor.BLUE;
+  return null;
+}
+
+/** 登録済みの休講・補講の色を今のルールに合わせる（エディタから 1 回実行） */
+function recolorKyuko() {
+  const items = loadJson_('items', []);
+  let n = 0;
+  items.filter(i => i.kind === 'kyuko' && i.eventId).forEach(i => {
+    try {
+      const cal = (i.calendarId && CalendarApp.getCalendarById(i.calendarId)) || CalendarApp.getDefaultCalendar();
+      const ev = cal.getEventById(i.eventId);
+      if (!ev) return;
+      const color = i.status === 'replaced' ? CalendarApp.EventColor.GRAY : eventColor_(i);
+      if (color) { ev.setColor(color); n++; }
+    } catch (e) { Logger.log('変更できませんでした: ' + i.title + ' / ' + e.message); }
+  });
+  Logger.log(n + ' 件の色を変えました');
+}
+
 /** 前の予定を「変更前」にする（カレンダー登録済みならタイトル・色・説明も変える） */
 function markReplaced_(prev, next) {
   const wasPending = prev.status === 'pending';
@@ -542,7 +578,8 @@ function addToCalendar_(it, opt) {
     start = new Date(y, m - 1, d);
     ev = cal.createAllDayEvent(it.title, start, { description: desc });
   }
-  if (it.changedFrom) ev.setColor(CalendarApp.EventColor.ORANGE);
+  const color = eventColor_(it);
+  if (color) ev.setColor(color);
   if (opt.remind) {
     const minutes = Math.round((start - new Date(y, m - 1, d - 1, 20, 0)) / 60000); // 前日 20:00
     ev.removeAllReminders();
@@ -665,7 +702,7 @@ function widgetData_() {
   const items = loadJson_('items', []);
   const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const week = Utilities.formatDate(new Date(Date.now() + 7 * 864e5), TZ, 'yyyy-MM-dd');
-  const byDate = (a, b) => (a.date || '9999') + (a.time || '') < (b.date || '9999') + (b.time || '') ? -1 : 1;
+  const byDate = displayOrder_;
   const pick = i => ({ id: i.id, title: i.title, date: i.date, time: i.time, source: i.source, keyword: i.keyword });
   const lastCheck = loadJson_('lastCheck', null);
   return {
@@ -675,6 +712,14 @@ function widgetData_() {
     pending: items.filter(i => i.status === 'pending').sort(byDate).map(pick),
     upcoming: items.filter(i => i.status === 'added' && i.date >= today && i.date <= week).sort(byDate).map(pick)
   };
+}
+
+/** 表示の並び順：補講 → 普通の予定 → 休講、同じ種類の中では日付順 */
+function displayRank_(i) { return i.keyword === '補講' ? 0 : i.keyword === '休講' ? 2 : 1; }
+function displayOrder_(a, b) {
+  const r = displayRank_(a) - displayRank_(b);
+  if (r) return r;
+  return (a.date || '9999') + (a.time || '') < (b.date || '9999') + (b.time || '') ? -1 : 1;
 }
 
 // ================================================================
