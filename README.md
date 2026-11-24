@@ -130,6 +130,7 @@ Google アカウントを2つ使う
 
 1. iPhone の Safari で https://akinekoaki.github.io/yotei-assistant/ を開く
 2. 共有ボタン →「ホーム画面に追加」
+  *webアプリとして開くでOK
 3. ホーム画面のアイコンから開いて、1の URL と TOKEN を入れて「接続する」（中継 GAS を使う人は、中継 GAS の URL とアプリ用 TOKEN）
 4. 「ルール」で自分用のルールを作る（最初は「締切・テスト」のルールが1個だけ入っている）
 
