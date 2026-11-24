@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>メール予定アシスタント</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="予定アシスタント">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F4FBFA">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0">
+<style>
+  :root {
+    --primary:#006A6A; --on-primary:#fff; --pc:#9CF1F0; --on-pc:#002020;
+    --sc:#CCE8E7; --on-sc:#051F1F; --surface:#F4FBFA; --sc-low:#EEF5F4; --sc-high:#E3EAE9;
+    --on-surface:#161D1D; --variant:#3F4948; --outline:#6F7979; --outline-v:#BEC9C8; --error:#BA1A1A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --primary:#4CDADA; --on-primary:#003737; --pc:#004F4F; --on-pc:#6FF7F6;
+      --sc:#324B4B; --on-sc:#CCE8E7; --surface:#0E1514; --sc-low:#161D1D; --sc-high:#252B2B;
+      --on-surface:#DDE4E3; --variant:#BEC9C8; --outline:#889392; --outline-v:#3F4948; --error:#FFB4AB; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--surface); color:var(--on-surface);
+    font:16px/1.5 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .ms { font-family:'Material Symbols Rounded'; font-size:24px; line-height:1; vertical-align:middle; }
+  header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:4px;
+    height:64px; padding:env(safe-area-inset-top) 8px 0 16px; background:var(--surface); }
+  header h1 { flex:1; margin:0; font-size:20px; font-weight:600; }
+  .icon-btn { width:48px; height:48px; border:0; border-radius:24px; background:none; color:var(--variant); cursor:pointer; }
+  .icon-btn:active { background:var(--sc-high); }
+  main { padding:0 16px calc(104px + env(safe-area-inset-bottom)); }
+  .view { display:none; } .view.on { display:block; }
+  .status { font-size:14px; color:var(--variant); margin:4px 0 12px; }
+  h2 { font-size:18px; margin:20px 0 8px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px;
+    border:1px solid var(--outline-v); background:none; color:var(--variant); font-size:14px; cursor:pointer; }
+  .chip.on { background:var(--sc); color:var(--on-sc); border-color:transparent; }
+  .chip .ms { font-size:18px; }
+  .chip .x { margin-right:-6px; opacity:.6; }
+  .list { background:var(--sc-low); border-radius:16px; overflow:hidden; }
+  .li { display:flex; align-items:center; gap:16px; min-height:72px; padding:8px 16px; border-bottom:1px solid var(--outline-v); cursor:pointer; }
+  .li:last-child { border-bottom:0; }
+  .li .ms.lead { color:var(--variant); }
+  .li .t { flex:1; min-width:0; }
+  .li .l { font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .li .s { font-size:14px; color:var(--variant); }
+  .empty { padding:20px 16px; color:var(--variant); font-size:14px; }
+  .card { border:1px solid var(--outline-v); border-radius:12px; padding:16px; margin:8px 0 16px; }
+  .card .head { display:flex; gap:8px; align-items:center; font-weight:600; }
+  .card .meta { font-size:13px; color:var(--variant); margin:4px 0 8px; }
+  .card .body { font-size:14px; }
+  mark { background:var(--pc); color:var(--on-pc); border-radius:4px; padding:0 2px; }
+  a { color:var(--primary); }
+  .field { position:relative; margin:16px 0; }
+  .field label { position:absolute; top:-9px; left:12px; padding:0 4px; font-size:12px; color:var(--variant); background:var(--surface); }
+  .field input, .field select { width:100%; height:56px; padding:0 16px; border:1px solid var(--outline); border-radius:8px;
+    background:none; color:var(--on-surface); font-size:16px; -webkit-appearance:none; appearance:none; }
+  .field input:focus, .field select:focus { outline:2px solid var(--primary); border-color:transparent; }
+  .sw-row { display:flex; align-items:center; gap:16px; min-height:56px; }
+  .sw-row .t { flex:1; }
+  .switch { position:relative; width:52px; height:32px; flex:none; }
+  .switch input { opacity:0; width:0; height:0; }
+  .switch span { position:absolute; inset:0; border-radius:16px; background:var(--sc-high); border:2px solid var(--outline); transition:.2s; }
+  .switch span::after { content:''; position:absolute; left:6px; top:6px; width:16px; height:16px; border-radius:50%; background:var(--outline); transition:.2s; }
+  .switch input:checked + span { background:var(--primary); border-color:var(--primary); }
+  .switch input:checked + span::after { left:22px; top:2px; width:24px; height:24px; background:var(--on-primary); }
+  .btns { display:flex; gap:8px; justify-content:flex-end; margin:24px 0; }
+  .btn { height:48px; padding:0 24px; border-radius:24px; border:1px solid var(--outline); background:none;
+    color:var(--primary); font-size:15px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  .btn.filled { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  .btn.tonal { background:var(--sc); color:var(--on-sc); border-color:transparent; }
+  .btn:disabled { opacity:.5; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row .field { flex:1; margin:16px 0 8px; }
+  .note { font-size:13px; color:var(--variant); }
+  .error { background:#FFDAD6; color:#410002; border-radius:12px; padding:12px 16px; font-size:14px; margin:8px 0; }
+  nav { position:fixed; left:0; right:0; bottom:0; z-index:5; display:flex; height:calc(80px + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom); background:var(--sc-low); }
+  nav button { flex:1; border:0; background:none; color:var(--variant); font-size:12px; font-weight:600; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
+  nav button .pill { width:64px; height:32px; border-radius:16px; display:flex; align-items:center; justify-content:center; }
+  nav button.on { color:var(--on-surface); }
+  nav button.on .pill { background:var(--sc); color:var(--on-sc); }
+  nav button.on .ms { font-variation-settings:'FILL' 1; }
+  .snack { position:fixed; left:16px; right:16px; bottom:calc(96px + env(safe-area-inset-bottom)); z-index:9; padding:14px 16px;
+    border-radius:8px; background:#2B3231; color:#ECF2F1; font-size:14px; display:none; }
+  .loading { position:fixed; top:0; left:0; right:0; height:3px; background:var(--primary); z-index:10; display:none; animation:ld 1s infinite; }
+  @keyframes ld { 0%{transform:scaleX(.1);transform-origin:left} 50%{transform:scaleX(.6)} 100%{transform:scaleX(.1);transform-origin:right} }
+  code { font-size:12px; word-break:break-all; background:var(--sc-high); padding:2px 4px; border-radius:4px; }
+  .field textarea { width:100%; padding:16px; border:1px solid var(--outline); border-radius:8px; background:none; color:var(--on-surface); font:16px/1.5 inherit; }
+  .field textarea:focus { outline:2px solid var(--primary); border-color:transparent; }
+  .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:6px; background:var(--sc); color:var(--on-sc); margin-left:4px; vertical-align:middle; }
+  .danger { color:var(--error); border-color:var(--error); }
+  .kyuko-only { display:none; } .kyuko .kyuko-only { display:block; } .kyuko .date-only { display:none; }
+</style>
+</head>
+<body>
+<div class="loading" id="loading"></div>
+
+<header>
+  <button class="icon-btn" id="backBtn" style="display:none" onclick="goBack()"><span class="ms">arrow_back_ios_new</span></button>
+  <h1 id="title">メール予定アシスタント</h1>
+  <button class="icon-btn" id="refreshBtn" onclick="checkNow()" aria-label="今すぐチェック"><span class="ms">refresh</span></button>
+</header>
+
+<main>
+  <!-- 接続設定（初回のみ） -->
+  <section class="view" id="v-setup">
+    <p class="note">最初に一度だけ、Google Apps Script との接続を設定します。</p>
+    <div class="field"><label>Web アプリの URL（…/exec）</label>
+      <input id="cUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocorrect="off"></div>
+    <div class="field"><label>トークン</label>
+      <input id="cToken" placeholder="setup の実行ログに出た TOKEN" autocapitalize="off" autocorrect="off"></div>
+    <p class="note">「…/exec?t=…」の形の URL を上の欄に貼り付けた場合は、トークンは空欄のままで大丈夫です。</p>
+    <div class="btns"><button class="btn filled" id="connectBtn" onclick="connect()"><span class="ms">link</span>接続する</button></div>
+  </section>
+
+  <!-- ホーム -->
+  <section class="view on" id="v-home">
+    <div class="status" id="status">読み込み中…</div>
+    <div id="errors"></div>
+    <div class="chips" id="filter"></div>
+    <h2 id="newHead">新しく見つかった予定</h2>
+    <div class="list" id="newList"></div>
+    <h2>登録済みの予定（今週）</h2>
+    <div class="list" id="weekList"></div>
+  </section>
+
+  <!-- 予定の確認 -->
+  <section class="view" id="v-detail">
+    <div class="card" id="srcCard"></div>
+    <h2 style="font-size:16px">読み取った予定</h2>
+    <div class="field"><label>タイトル</label><input id="fTitle"></div>
+    <div class="field"><label>日付</label><input id="fDate" type="date"></div>
+    <div class="field"><label>時刻（空欄なら終日）</label><input id="fTime" type="time"></div>
+    <div class="field"><label>追加先カレンダー</label><select id="fCal"></select></div>
+    <div class="sw-row"><div class="t">前日の20:00にリマインド</div>
+      <label class="switch"><input type="checkbox" id="fRemind"><span></span></label></div>
+    <div class="btns">
+      <button class="btn" onclick="ignoreItem()">無視する</button>
+      <button class="btn filled" id="addBtn" onclick="addItem()"><span class="ms">event_available</span>カレンダーに追加</button>
+    </div>
+  </section>
+
+  <!-- ルール一覧 -->
+  <section class="view" id="v-rules">
+    <p class="note">メールや Classroom のお知らせを、どのルールで読み取るかを決めます。1通のメールに複数のルールが当てはまるときは、上のルールが優先です。</p>
+    <div class="list" id="ruleList"></div>
+    <div class="btns" style="justify-content:flex-start;flex-wrap:wrap">
+      <button class="btn tonal" onclick="newRule()"><span class="ms">add</span>ルールを追加</button>
+      <button class="btn" onclick="newRule(true)"><span class="ms">event_busy</span>休講・補講のルールを追加</button>
+    </div>
+  </section>
+
+  <!-- ルールの編集 -->
+  <section class="view" id="v-rule">
+    <div class="field"><label>ルールの名前</label><input id="rName" placeholder="例：バイトのシフト"></div>
+    <div class="sw-row"><div class="t">このルールを使う</div>
+      <label class="switch"><input type="checkbox" id="rOn"><span></span></label></div>
+    <div class="field"><label>読み取り方</label>
+      <select id="rMode" onchange="toggleMode()">
+        <option value="date">本文から日付を自動で拾う</option>
+        <option value="kyuko">休講・補講の案内（■ 専攻 /【休講】【補講】形式）</option>
+      </select></div>
+
+    <h2>対象</h2>
+    <div class="list">
+      <div class="li" style="cursor:default"><span class="ms lead">mail</span>
+        <div class="t"><div class="l">Gmail</div></div>
+        <label class="switch"><input type="checkbox" id="rGmail"><span></span></label></div>
+      <div class="li" style="cursor:default"><span class="ms lead">school</span>
+        <div class="t"><div class="l">Classroom のお知らせ</div></div>
+        <label class="switch"><input type="checkbox" id="rClass"><span></span></label></div>
+    </div>
+    <div class="field"><label>差出人（空欄ならすべて・カンマ区切りで複数）</label>
+      <input id="rFrom" placeholder="例：info@example.com, @school.ac.jp" autocapitalize="off" autocorrect="off"></div>
+    <p class="note" style="margin-top:-8px">アドレス全体（info@example.com）でも、ドメインだけ（@example.com）でも指定できます。Gmail にだけ使われます。</p>
+    <div class="date-only">
+      <div class="field"><label>キーワード（カンマ区切り・空欄ならすべて）</label>
+        <input id="rKeywords" placeholder="例：締切, 提出期限, シフト"></div>
+      <p class="note" style="margin-top:-8px">キーワードも差出人も空欄のルールは、広すぎるので Gmail では使われません。</p>
+    </div>
+    <div class="kyuko-only">
+      <div class="field"><label>専攻（「■」の後ろの名前・空欄ならすべて）</label>
+        <input id="rMajor" placeholder="例：〇〇専攻1年"></div>
+      <div class="field"><label>時限表（空欄なら終日の予定）</label>
+        <textarea id="rPeriods" rows="4" placeholder="1限 9:10-10:40&#10;2限 10:50-12:20"></textarea></div>
+    </div>
+
+    <h2>登録のしかた</h2>
+    <div class="field"><label>追加先カレンダー</label><select id="rCal"></select></div>
+    <div class="list">
+      <div class="li" style="cursor:default"><span class="ms lead">auto_mode</span>
+        <div class="t"><div class="l">見つけたらすぐ登録</div><div class="s">オフ：確認してから追加する</div></div>
+        <label class="switch"><input type="checkbox" id="rAuto"><span></span></label></div>
+      <div class="li" style="cursor:default"><span class="ms lead">alarm</span>
+        <div class="t"><div class="l">前日の20:00にリマインド</div></div>
+        <label class="switch"><input type="checkbox" id="rRemind"><span></span></label></div>
+    </div>
+
+    <div class="btns">
+      <button class="btn danger" id="delBtn" onclick="deleteRule()">削除</button>
+      <button class="btn filled" onclick="saveRule()"><span class="ms">check</span>保存</button>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section class="view" id="v-settings">
+    <h2>アカウント</h2>
+    <div class="list">
+      <div class="li" style="cursor:default"><span class="ms lead">account_circle</span>
+        <div class="t"><div class="l" id="accMail"></div><div class="s">Gmail・Classroom・カレンダーをこのアカウントで読みます</div></div></div>
+    </div>
+    <h2>チェック設定</h2>
+    <div class="field"><label>確認間隔</label>
+      <select id="sInterval" onchange="saveSettings()"><option value="30">30分</option><option value="60">1時間</option><option value="180">3時間</option></select></div>
+    <div class="field"><label>既定の追加先カレンダー</label><select id="sCal" onchange="saveSettings()"></select></div>
+    <div class="list">
+      <div class="li" style="cursor:default"><span class="ms lead">assignment</span>
+        <div class="t"><div class="l">Classroom の期限付き課題を拾う</div><div class="s">期限がある課題は全部</div></div>
+        <label class="switch"><input type="checkbox" id="sCw" onchange="saveSettings()"><span></span></label></div>
+      <div class="li" style="cursor:default"><span class="ms lead">auto_mode</span>
+        <div class="t"><div class="l">課題はすぐ登録</div><div class="s">オフ：確認してから追加する</div></div>
+        <label class="switch"><input type="checkbox" id="sCwAuto" onchange="saveSettings()"><span></span></label></div>
+      <div class="li" style="cursor:default"><span class="ms lead">notifications</span>
+        <div class="t"><div class="l">新しい予定を通知</div><div class="s">ウィジェット（Scriptable）が通知します</div></div>
+        <label class="switch"><input type="checkbox" id="sNotify" onchange="saveSettings()"><span></span></label></div>
+    </div>
+    <h2>ウィジェット</h2>
+    <p class="note">Scriptable のスクリプトに次の URL を設定してください。（この URL は他の人に教えないでください）</p>
+    <p><code id="widgetUrl"></code></p>
+    <button class="btn tonal" onclick="copyWidgetUrl()"><span class="ms">content_copy</span>URL をコピー</button>
+    <h2>接続</h2>
+    <p class="note" id="connInfo"></p>
+    <button class="btn" onclick="resetConnection()"><span class="ms">link_off</span>接続設定をやり直す</button>
+  </section>
+</main>
+
+<nav id="nav">
+  <button data-v="home" class="on" onclick="go('home')"><span class="pill"><span class="ms">home</span></span>ホーム</button>
+  <button data-v="rules" onclick="go('rules')"><span class="pill"><span class="ms">rule</span></span>ルール</button>
+  <button data-v="settings" onclick="go('settings')"><span class="pill"><span class="ms">settings</span></span>設定</button>
+</nav>
+<div class="snack" id="snack"></div>
+
+<script>
+// 接続設定はこの端末のアプリ内にだけ保存する
+const CONF_KEY = 'mail-schedule-conn';
+function loadConn() { try { return JSON.parse(localStorage.getItem(CONF_KEY)) || null; } catch (e) { return null; } }
+let CONN = loadConn();
+let S = null;          // サーバーの状態
+let filter = 'all';
+let current = null;    // 確認中の予定
+let editing = null;    // 編集中のルール（index、新規は -1）
+let backTo = 'home';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const WD = ['日','月','火','水','木','金','土'];
+function fmtDate(d, t) {
+  if (!d) return '日付不明';
+  const [y, m, day] = d.split('-').map(Number);
+  return m + '/' + day + '(' + WD[new Date(y, m - 1, day).getDay()] + ')' + (t ? ' ' + t : '');
+}
+function hm(ms) { if (!ms) return '—'; const d = new Date(ms); return d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2); }
+const splitList = s => String(s || '').split(/[,、，\s]+/).map(x => x.trim()).filter(Boolean);
+
+// ---------- 通信（GAS の doPost。text/plain にして CORS のプリフライトを避ける） ----------
+async function request(conn, op, params) {
+  const res = await fetch(conn.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ t: conn.token, op: op }, params || {}))
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || '通信エラー');
+  return j.data;
+}
+async function call(op, params) {
+  $('loading').style.display = 'block';
+  try { return await request(CONN, op, params); }
+  catch (e) { snack('⚠️ ' + (e.name === 'TypeError' ? '接続できませんでした' : e.message)); throw e; }
+  finally { $('loading').style.display = 'none'; }
+}
+function snack(msg) { const el = $('snack'); el.textContent = msg; el.style.display = 'block'; clearTimeout(el._t); el._t = setTimeout(() => el.style.display = 'none', 3000); }
+
+// ---------- 接続設定 ----------
+async function connect() {
+  let url = $('cUrl').value.trim(), token = $('cToken').value.trim();
+  const m = url.match(/[?&]t=([^&#]+)/);
+  if (m) { token = token || decodeURIComponent(m[1]); url = url.split('?')[0]; }
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { snack('URL は https://script.google.com/…/exec の形で入力してください'); return; }
+  if (!token) { snack('トークンを入力してください'); return; }
+  $('connectBtn').disabled = true;
+  try {
+    S = await request({ url: url, token: token }, 'state');
+    CONN = { url: url, token: token };
+    localStorage.setItem(CONF_KEY, JSON.stringify(CONN));
+    renderAll(); go('home'); snack('接続しました');
+  } catch (e) {
+    snack('⚠️ 接続できませんでした：' + e.message);
+  } finally { $('connectBtn').disabled = false; }
+}
+function resetConnection() {
+  if (!confirm('接続設定を消して、最初からやり直しますか？')) return;
+  localStorage.removeItem(CONF_KEY); CONN = null; S = null;
+  $('cUrl').value = ''; $('cToken').value = '';
+  go('setup');
+}
+
+// ---------- 画面遷移 ----------
+const TITLES = { setup: 'はじめに', home: 'メール予定アシスタント', detail: '予定の確認', rules: 'ルール', rule: 'ルールの編集', settings: '設定' };
+function go(v) {
+  document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === 'v-' + v));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v || (v === 'rule' && b.dataset.v === 'rules')));
+  $('title').textContent = TITLES[v];
+  const sub = v === 'detail' || v === 'rule';
+  $('backBtn').style.display = sub ? '' : 'none';
+  $('refreshBtn').style.display = v === 'home' ? '' : 'none';
+  $('nav').style.display = sub || v === 'setup' ? 'none' : 'flex';
+  window.scrollTo(0, 0);
+}
+function goBack() { go(document.querySelector('#v-rule.on') ? 'rules' : 'home'); }
+
+// ---------- ホーム ----------
+function renderHome() {
+  const intervalLabel = { 30: '30分ごと', 60: '1時間ごと', 180: '3時間ごと' }[S.settings.interval];
+  $('status').textContent = '最終チェック ' + hm(S.lastCheck) + ' ・ 次回 ' + hm(S.nextCheck) + '（' + intervalLabel + '）' +
+    (S.queued ? ' ・ 反映待ち ' + S.queued + '件' : '');
+  $('errors').innerHTML = (S.errors || []).map(e => '<div class="error">' + esc(e) + '</div>').join('');
+
+  const f = [['all', 'すべて', null], ['gmail', 'Gmail', 'mail'], ['classroom', 'Classroom', 'school']];
+  $('filter').innerHTML = f.map(([k, l, ic]) =>
+    '<button class="chip ' + (filter === k ? 'on' : '') + '" onclick="filter=\'' + k + '\';renderHome()">' +
+    (filter === k ? '<span class="ms">check</span>' : ic ? '<span class="ms">' + ic + '</span>' : '') + l + '</button>').join('');
+
+  const byDate = (a, b) => ((a.date || '9999') + (a.time || '')).localeCompare((b.date || '9999') + (b.time || ''));
+  const match = i => filter === 'all' || i.source === filter;
+  const pending = S.items.filter(i => i.status === 'pending' && match(i)).sort(byDate);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end = new Date(today.getTime() + 7 * 864e5);
+  const week = S.items.filter(i => {
+    if (i.status !== 'added' || !i.date || !match(i)) return false;
+    const [y, m, d] = i.date.split('-').map(Number); const dt = new Date(y, m - 1, d);
+    return dt >= today && dt <= end;
+  }).sort(byDate);
+
+  $('newHead').textContent = '新しく見つかった予定（' + pending.length + '件）';
+  $('newList').innerHTML = pending.length ? pending.map(i =>
+    '<div class="li" onclick="openDetail(\'' + i.id + '\')"><span class="ms lead">' + (i.source === 'gmail' ? 'mail' : 'school') + '</span>' +
+    '<div class="t"><div class="l">' + esc(i.title) + '</div><div class="s">' + fmtDate(i.date, i.time) + ' ・ ' +
+    esc(i.ruleName || (i.source === 'gmail' ? 'Gmail' : 'Classroom')) + '</div></div><span class="ms">chevron_right</span></div>'
+  ).join('') : '<div class="empty">新しい予定はありません</div>';
+
+  $('weekList').innerHTML = week.length ? week.map(i =>
+    '<div class="li" style="cursor:default"><span class="ms lead">event_available</span><div class="t"><div class="l">' + esc(i.title) +
+    '</div><div class="s">' + fmtDate(i.date, i.time) + ' ・ ' + esc(i.calendarName || 'カレンダー') + (i.calendarName === '反映待ち' ? '' : 'に登録済み') + '</div></div></div>'
+  ).join('') : '<div class="empty">今週の登録済みの予定はありません</div>';
+}
+
+// ---------- 予定の確認 ----------
+function openDetail(id) {
+  current = S.items.find(i => i.id === id);
+  if (!current) return;
+  const kw = esc(current.keyword || '');
+  const hl = kw ? esc(current.snippet).split(kw).join('<mark>' + kw + '</mark>') : esc(current.snippet);
+  $('srcCard').innerHTML =
+    '<div class="head"><span class="ms">' + (current.source === 'gmail' ? 'mail' : 'school') + '</span>' + esc(current.title) + '</div>' +
+    '<div class="meta">' + (current.source === 'gmail' ? 'Gmail' : 'Google Classroom') + ' ・ ' + esc(current.from) +
+    (current.receivedAt ? ' ・ ' + new Date(current.receivedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') + '</div>' +
+    '<div class="body">「…' + hl + '…」</div>' +
+    '<div class="meta" style="margin-top:8px">ルール：' + esc(current.ruleName || '—') +
+    (current.link ? ' ・ <a href="' + esc(current.link) + '" target="_blank">元のメールを開く</a>' : '') + '</div>';
+  $('fTitle').value = current.title || '';
+  $('fDate').value = current.date || '';
+  $('fTime').value = current.time || '';
+  fillCalendars($('fCal'), current.calendarId || S.settings.calendarId);
+  $('fRemind').checked = current.remind !== false;
+  go('detail');
+}
+async function addItem() {
+  if (!$('fDate').value) { snack('日付を入力してください'); return; }
+  $('addBtn').disabled = true;
+  try {
+    const r = await call('add', { id: current.id, patch: { title: $('fTitle').value.trim(), date: $('fDate').value, time: $('fTime').value,
+      calendarId: $('fCal').value, remind: $('fRemind').checked } });
+    snack(r && r.calendarName === '反映待ち' ? '追加しました（数分でカレンダーに反映されます）' : 'カレンダーに追加しました');
+    await reload(); go('home');
+  } finally { $('addBtn').disabled = false; }
+}
+async function ignoreItem() {
+  await call('ignore', { id: current.id });
+  snack('無視しました');
+  await reload(); go('home');
+}
+
+// ---------- ルール ----------
+function ruleSummary(r) {
+  const parts = [];
+  parts.push(r.mode === 'kyuko' ? '休講・補講' + (r.major ? '（' + r.major + '）' : '') : (r.keywords.length ? r.keywords.slice(0, 3).join('・') + (r.keywords.length > 3 ? ' ほか' : '') : 'キーワードなし'));
+  if (r.from) parts.push('差出人 ' + r.from);
+  parts.push([r.gmail ? 'Gmail' : '', r.classroom ? 'Classroom' : ''].filter(Boolean).join('・') || '対象なし');
+  if (r.autoAdd) parts.push('すぐ登録');
+  return parts.join(' / ');
+}
+function renderRules() {
+  const rules = S.settings.rules || [];
+  $('ruleList').innerHTML = rules.length ? rules.map((r, i) =>
+    '<div class="li" onclick="editRule(' + i + ')"><span class="ms lead">' + (r.mode === 'kyuko' ? 'event_busy' : 'rule') + '</span>' +
+    '<div class="t"><div class="l">' + esc(r.name) + (r.on ? '' : '<span class="tag">オフ</span>') + '</div><div class="s">' + esc(ruleSummary(r)) + '</div></div>' +
+    (i > 0 ? '<button class="icon-btn" onclick="event.stopPropagation();moveRule(' + i + ')" aria-label="上へ"><span class="ms">arrow_upward</span></button>' : '') +
+    '<span class="ms">chevron_right</span></div>').join('')
+    : '<div class="empty">ルールがありません。「ルールを追加」から作ってください</div>';
+}
+function newRule(kyuko) {
+  const base = kyuko ? Object.assign({}, S.kyukoTemplate) :
+    { name: '', mode: 'date', keywords: [], from: '', gmail: true, classroom: true, autoAdd: false, remind: true, major: '', periods: '' };
+  base.on = true; base.calendarId = '';
+  openRuleEditor(base, -1);
+}
+function editRule(i) { openRuleEditor(S.settings.rules[i], i); }
+function openRuleEditor(r, i) {
+  editing = i;
+  $('rName').value = r.name || ''; $('rOn').checked = r.on !== false;
+  $('rMode').value = r.mode || 'date';
+  $('rGmail').checked = r.gmail !== false; $('rClass').checked = r.classroom !== false;
+  $('rFrom').value = r.from || ''; $('rKeywords').value = (r.keywords || []).join(', ');
+  $('rMajor').value = r.major || ''; $('rPeriods').value = r.periods || '';
+  fillCalendars($('rCal'), r.calendarId || '', true);
+  $('rAuto').checked = !!r.autoAdd; $('rRemind').checked = r.remind !== false;
+  $('delBtn').style.display = i >= 0 ? '' : 'none';
+  toggleMode();
+  go('rule');
+}
+function toggleMode() { $('v-rule').classList.toggle('kyuko', $('rMode').value === 'kyuko'); }
+async function saveRule() {
+  const name = $('rName').value.trim();
+  if (!name) { snack('ルールの名前を入れてください'); return; }
+  const old = editing >= 0 ? S.settings.rules[editing] : {};
+  const r = {
+    id: old.id || ('r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
+    name: name, on: $('rOn').checked, mode: $('rMode').value,
+    gmail: $('rGmail').checked, classroom: $('rClass').checked,
+    from: splitList($('rFrom').value).join(', '), keywords: splitList($('rKeywords').value),
+    major: $('rMajor').value.trim(), periods: $('rPeriods').value,
+    calendarId: $('rCal').value, autoAdd: $('rAuto').checked, remind: $('rRemind').checked
+  };
+  if (r.mode === 'date' && r.gmail && !r.keywords.length && !r.from) {
+    if (!confirm('キーワードも差出人も空なので、Gmail では使われません。このまま保存しますか？')) return;
+  }
+  const rules = S.settings.rules.slice();
+  if (editing >= 0) rules[editing] = r; else rules.push(r);
+  await persist({ rules: rules });
+  go('rules'); snack('保存しました');
+}
+async function deleteRule() {
+  if (!confirm('このルールを削除しますか？（登録済みの予定は消えません）')) return;
+  const rules = S.settings.rules.slice(); rules.splice(editing, 1);
+  await persist({ rules: rules });
+  go('rules'); snack('削除しました');
+}
+async function moveRule(i) {
+  const rules = S.settings.rules.slice();
+  const [r] = rules.splice(i, 1); rules.splice(i - 1, 0, r);
+  await persist({ rules: rules });
+}
+
+// ---------- 設定 ----------
+function fillCalendars(sel, selected, withDefault) {
+  const cals = S.calendars.length ? S.calendars : [{ id: S.defaultCalendarId, name: '既定のカレンダー' }];
+  sel.innerHTML = (withDefault ? '<option value="">（既定のカレンダー）</option>' : '') +
+    cals.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>').join('');
+  sel.value = selected || (withDefault ? '' : S.defaultCalendarId);
+}
+function renderSettings() {
+  $('accMail').textContent = S.account;
+  $('sInterval').value = String(S.settings.interval);
+  fillCalendars($('sCal'), S.settings.calendarId);
+  const cw = S.settings.courseWork || {};
+  $('sCw').checked = !!cw.on; $('sCwAuto').checked = !!cw.autoAdd;
+  $('sNotify').checked = !!S.settings.notify;
+  $('widgetUrl').textContent = S.widgetUrl;
+  $('connInfo').textContent = '接続先：' + CONN.url.replace(/^https:\/\/script\.google\.com\/(?:a\/macros\/[^/]+|macros)\/s\/(.{8}).*$/, 'Apps Script（$1…）');
+}
+function saveSettings() {
+  persist({ interval: Number($('sInterval').value), calendarId: $('sCal').value,
+    courseWork: { on: $('sCw').checked, autoAdd: $('sCwAuto').checked }, notify: $('sNotify').checked });
+}
+function copyWidgetUrl() {
+  navigator.clipboard.writeText(S.widgetUrl).then(() => snack('コピーしました'), () => snack('長押しでコピーしてください'));
+}
+
+// ---------- 共通 ----------
+async function persist(patch) {
+  S.settings = await call('saveSettings', { settings: patch });
+  renderAll();
+}
+function renderAll() { renderHome(); renderRules(); renderSettings(); }
+async function reload() { S = await call('state'); renderAll(); }
+async function checkNow() {
+  S = await call('checkNow'); renderAll();
+  snack(S.queued !== undefined ? 'チェックを依頼しました（数分で反映されます）' : 'チェックしました');
+}
+
+// ---------- 起動 ----------
+if (!CONN) {
+  go('setup');
+  $('status').textContent = '';
+} else {
+  reload().catch(() => { $('status').textContent = '接続できませんでした。右上の更新ボタンで再試行してください'; });
+}
+// アプリに戻ってきたら最新の状態に更新
+document.addEventListener('visibilitychange', () => { if (!document.hidden && CONN) reload().catch(() => {}); });
+</script>
+</body>
+</html>
