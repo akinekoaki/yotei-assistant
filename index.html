@@ -97,6 +97,7 @@
   .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:6px; background:var(--sc); color:var(--on-sc); margin-left:4px; vertical-align:middle; }
   .danger { color:var(--error); border-color:var(--error); }
   .kyuko-only { display:none; } .kyuko .kyuko-only { display:block; } .kyuko .date-only { display:none; }
+  .ignore .reg-only { display:none; }
 </style>
 </head>
 <body>
@@ -149,7 +150,7 @@
 
   <!-- ルール一覧 -->
   <section class="view" id="v-rules">
-    <p class="note">メールや Classroom のお知らせを、どのルールで読み取るかを決めます。1通のメールに複数のルールが当てはまるときは、上のルールが優先です。</p>
+    <p class="note">メールや Classroom のお知らせを、どのルールで読み取るかを決めます。1通のメールに複数のルールが当てはまるときは、上のルールが優先です（「無視する」ルールはいつでも一番先）。</p>
     <div class="list" id="ruleList"></div>
     <div class="btns" style="justify-content:flex-start;flex-wrap:wrap">
       <button class="btn tonal" onclick="newRule()"><span class="ms">add</span>ルールを追加</button>
@@ -166,6 +167,7 @@
       <select id="rMode" onchange="toggleMode()">
         <option value="date">本文から日付を自動で拾う</option>
         <option value="kyuko">休講・補講の案内（■ 専攻 /【休講】【補講】形式）</option>
+        <option value="ignore">この文言があったら無視する</option>
       </select></div>
 
     <h2>対象</h2>
@@ -192,6 +194,8 @@
         <textarea id="rPeriods" rows="4" placeholder="1限 9:10-10:40&#10;2限 10:50-12:20"></textarea></div>
     </div>
 
+    <p class="note ignore-note" style="display:none">当てはまるメール・お知らせは、ほかのルールより先に判定されて、何も登録されません。</p>
+    <div class="reg-only">
     <h2>登録のしかた</h2>
     <div class="field"><label>追加先カレンダー</label><select id="rCal"></select></div>
     <div class="list">
@@ -201,6 +205,7 @@
       <div class="li" style="cursor:default"><span class="ms lead">alarm</span>
         <div class="t"><div class="l">前日の20:00にリマインド</div></div>
         <label class="switch"><input type="checkbox" id="rRemind"><span></span></label></div>
+    </div>
     </div>
 
     <div class="btns">
@@ -339,7 +344,9 @@ function renderHome() {
     '<button class="chip ' + (filter === k ? 'on' : '') + '" onclick="filter=\'' + k + '\';renderHome()">' +
     (filter === k ? '<span class="ms">check</span>' : ic ? '<span class="ms">' + ic + '</span>' : '') + l + '</button>').join('');
 
-  const byDate = (a, b) => ((a.date || '9999') + (a.time || '')).localeCompare((b.date || '9999') + (b.time || ''));
+  // 並び順：補講 → 普通の予定 → 休講、同じ種類の中では日付順
+  const rank = i => i.keyword === '補講' ? 0 : i.keyword === '休講' ? 2 : 1;
+  const byDate = (a, b) => (rank(a) - rank(b)) || ((a.date || '9999') + (a.time || '')).localeCompare((b.date || '9999') + (b.time || ''));
   const match = i => filter === 'all' || i.source === filter;
   const pending = S.items.filter(i => i.status === 'pending' && match(i)).sort(byDate);
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -402,16 +409,17 @@ async function ignoreItem() {
 // ---------- ルール ----------
 function ruleSummary(r) {
   const parts = [];
-  parts.push(r.mode === 'kyuko' ? '休講・補講' + (r.major ? '（' + r.major + '）' : '') : (r.keywords.length ? r.keywords.slice(0, 3).join('・') + (r.keywords.length > 3 ? ' ほか' : '') : 'キーワードなし'));
+  if (r.mode === 'ignore') parts.push('無視：' + (r.keywords.length ? r.keywords.slice(0, 3).join('・') : '差出人だけ'));
+  else parts.push(r.mode === 'kyuko' ? '休講・補講' + (r.major ? '（' + r.major + '）' : '') : (r.keywords.length ? r.keywords.slice(0, 3).join('・') + (r.keywords.length > 3 ? ' ほか' : '') : 'キーワードなし'));
   if (r.from) parts.push('差出人 ' + r.from);
   parts.push([r.gmail ? 'Gmail' : '', r.classroom ? 'Classroom' : ''].filter(Boolean).join('・') || '対象なし');
-  if (r.autoAdd) parts.push('すぐ登録');
+  if (r.autoAdd && r.mode !== 'ignore') parts.push('すぐ登録');
   return parts.join(' / ');
 }
 function renderRules() {
   const rules = S.settings.rules || [];
   $('ruleList').innerHTML = rules.length ? rules.map((r, i) =>
-    '<div class="li" onclick="editRule(' + i + ')"><span class="ms lead">' + (r.mode === 'kyuko' ? 'event_busy' : 'rule') + '</span>' +
+    '<div class="li" onclick="editRule(' + i + ')"><span class="ms lead">' + ({ kyuko: 'event_busy', ignore: 'block' }[r.mode] || 'rule') + '</span>' +
     '<div class="t"><div class="l">' + esc(r.name) + (r.on ? '' : '<span class="tag">オフ</span>') + '</div><div class="s">' + esc(ruleSummary(r)) + '</div></div>' +
     (i > 0 ? '<button class="icon-btn" onclick="event.stopPropagation();moveRule(' + i + ')" aria-label="上へ"><span class="ms">arrow_upward</span></button>' : '') +
     '<span class="ms">chevron_right</span></div>').join('')
@@ -437,7 +445,12 @@ function openRuleEditor(r, i) {
   toggleMode();
   go('rule');
 }
-function toggleMode() { $('v-rule').classList.toggle('kyuko', $('rMode').value === 'kyuko'); }
+function toggleMode() {
+  const m = $('rMode').value;
+  $('v-rule').classList.toggle('kyuko', m === 'kyuko');
+  $('v-rule').classList.toggle('ignore', m === 'ignore');
+  document.querySelector('.ignore-note').style.display = m === 'ignore' ? '' : 'none';
+}
 async function saveRule() {
   const name = $('rName').value.trim();
   if (!name) { snack('ルールの名前を入れてください'); return; }
@@ -450,7 +463,7 @@ async function saveRule() {
     major: $('rMajor').value.trim(), periods: $('rPeriods').value,
     calendarId: $('rCal').value, autoAdd: $('rAuto').checked, remind: $('rRemind').checked
   };
-  if (r.mode === 'date' && r.gmail && !r.keywords.length && !r.from) {
+  if (r.mode !== 'kyuko' && r.gmail && !r.keywords.length && !r.from) {
     if (!confirm('キーワードも差出人も空なので、Gmail では使われません。このまま保存しますか？')) return;
   }
   const rules = S.settings.rules.slice();
